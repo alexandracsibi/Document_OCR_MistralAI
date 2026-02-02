@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from ocr_service.config.mistral_client import get_mistral_client
 from ocr_service.core.types import DocType
-from ocr_service.pipeline.service import process_document
+from ocr_service.pipeline.service import process_document, unify_payload
 
 router = APIRouter()
 
@@ -112,16 +112,16 @@ def process(req: ProcessRequest) -> dict:
     try:
         client = get_mistral_client()
         res = process_document(client=client, doc_type=req.doc_type, image_path=path)
-
         doc_type = res.doc_type.value
-        data_key = "vehicle_data" if doc_type in VEHICLE_TYPES else "personal_data"
+        fields = dict(res.fields or {})         # sparse raw fields from processor
+        data_key, data = unify_payload(doc_type, fields)  # MUST fill missing keys with None
 
         return {
             "doc_type": doc_type,
             "document_number": res.document_number,
             "is_correct_document": res.is_correct_document,
             "confidence": round(res.confidence, 4),
-            data_key: res.fields or {},
+            data_key: data,                      # unified (all keys present)
         }
     finally:
         try:
