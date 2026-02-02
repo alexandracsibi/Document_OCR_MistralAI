@@ -10,3 +10,4 @@ build/
 dist/
 tests/
 .env
+tests/test_documents/
