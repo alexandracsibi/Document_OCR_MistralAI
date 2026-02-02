@@ -1,0 +1,19 @@
+from __future__ import annotations
+from typing import Any, Dict
+
+FIELDS = [
+    "document_number",
+    "full_name",
+    "birth_date",
+    "birth_place",
+    "issue_date",
+    "expiry_date",
+    "issuing_authority",
+]
+
+def empty() -> Dict[str, Any]:
+    """
+    Return an empty extraction result for ID front.
+    All fields are present and initialized to None.
+    """
+    return {field: None for field in FIELDS}

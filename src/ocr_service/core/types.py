@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 
 class DocType(str, Enum):
@@ -25,7 +25,7 @@ class OCRResult:
 @dataclass
 class ExtractionResult:
     doc_type: DocType
+    document_number: Optional[str]
     is_correct_document: bool
     confidence: float
     fields: dict[str, Any]
-    warnings: list[str]

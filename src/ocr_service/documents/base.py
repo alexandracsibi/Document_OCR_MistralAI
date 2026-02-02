@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 from ocr_service.core.types import OCRResult
 
 class DocumentProcessor(ABC):

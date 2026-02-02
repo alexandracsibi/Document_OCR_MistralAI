@@ -5,14 +5,11 @@ __pycache__/
 *.log
 
 .venv/
-venv/
-env/
-
+.env
 .git/
 .gitignore
 
 tests/
-data/
 *.ipynb
 
 .DS_Store

@@ -31,10 +31,7 @@ dependencies = [
   # --- API / server ---
   "fastapi>=0.110",
   "uvicorn[standard]>=0.27",
-  "python-multipart>=0.0.9",
-
-  # --- Optional (PDF support) ---
-  "PyMuPDF>=1.23"
+  "python-multipart>=0.0.9"
 ]
 
 [project.optional-dependencies]
@@ -47,7 +44,19 @@ dev = [
   "pre-commit>=3.6"
 ]
 
-# This enables `pip install .` to correctly find src/ocr_service
+# If you actually need PDF parsing locally (not required for sending PDFs to Mistral):
+pdf = [
+  "PyMuPDF>=1.23"
+]
+
+# Optional: makes `python -m ocr_service.cli.process` unnecessary
+# (adjust entry point if your CLI module path differs)
+[project.scripts]
+ocr-service = "ocr_service.cli.process:main"
+
+# -------------------------
+# Packaging (src/ layout)
+# -------------------------
 [tool.setuptools]
 package-dir = { "" = "src" }
 
@@ -58,7 +67,6 @@ include = ["ocr_service*"]
 # -------------------------
 # Tooling configuration
 # -------------------------
-
 [tool.black]
 line-length = 100
 target-version = ["py311"]
