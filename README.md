@@ -37,18 +37,19 @@ This command will move the starter code to the **app-example** directory and cre
 
 ## Project skeleton
 
-  src/
-  ├─ api/
-  │  ├─ client.ts        // fetch wrapper, base URL, auth header injection
-  │  └─ endpoints.ts     // typed functions: uploadPhoto(), etc.
-  ├─ auth/
-  │  ├─ auth0.ts         // Auth0 client config + login/logout
-  │  ├─ session.ts       // token storage + refresh logic (later)
-  │  └─ biometric.ts     // local-authentication helper
-  ├─ storage/
-  │  └─ secureStore.ts   // wrapper around expo-secure-store
-  ├─ config/
-  │  └─ env.ts           // config from app.json extra / env vars
-  └─ types/
-     └─ api.ts
-
+<pre>
+src/
+├─ api/
+│  ├─ client.ts        // fetch wrapper, base URL, auth header injection
+│  └─ endpoints.ts     // typed functions: uploadPhoto(), etc.
+├─ auth/
+│  ├─ auth0.ts         // Auth0 client config + login/logout
+│  ├─ session.ts       // token storage + refresh logic (later)
+│  └─ biometric.ts     // local-authentication helper
+├─ storage/
+│  └─ secureStore.ts   // wrapper around expo-secure-store
+├─ config/
+│  └─ env.ts           // config from app.json extra / env vars
+└─ types/
+   └─ api.ts
+</pre>
