@@ -38,18 +38,35 @@ This command will move the starter code to the **app-example** directory and cre
 ## Project skeleton
 
 <pre>
-src/
-├─ api/
-│  ├─ client.ts        // fetch wrapper, base URL, auth header injection
-│  └─ endpoints.ts     // typed functions: uploadPhoto(), etc.
-├─ auth/
-│  ├─ auth0.ts         // Auth0 client config + login/logout
-│  ├─ session.ts       // token storage + refresh logic (later)
-│  └─ biometric.ts     // local-authentication helper
-├─ storage/
-│  └─ secureStore.ts   // wrapper around expo-secure-store
-├─ config/
-│  └─ env.ts           // config from app.json extra / env vars
-└─ types/
-   └─ api.ts
+.
+├─ app/
+│  ├─ (app)/
+│  │  ├─ _layout.tsx         // authenticated app stack layout
+│  │  ├─ home.tsx            // landing/home screen after login
+│  │  ├─ capture.tsx         // take/select photo + choose doc_type + upload
+│  │  └─ result.tsx          // show extracted fields + status/errors
+│  ├─ (auth)/
+│  │  ├─ _layout.tsx         // auth stack layout
+│  │  └─ login.tsx           // Auth0 login entry
+│  ├─ (lock)/
+│  │  ├─ _layout.tsx         // lock stack layout
+│  │  └─ unlock.tsx          // biometric/PIN gate before entering (app)
+│  ├─ callback.tsx           // Auth0 redirect handler (PKCE/code exchange)
+│  └─ index.tsx              // route entry: decide auth/lock/app redirect
+└─ src/
+   ├─ api/
+   │  ├─ client.ts           // fetch wrapper, base URL, auth header injection
+   │  └─ endpoints.ts        // typed functions: uploadPhoto(), etc.
+   ├─ auth/
+   │  ├─ auth0.ts            // Auth0 client config + login/logout
+   │  ├─ session.ts          // token storage + refresh logic (later)
+   │  ├─ biometric.ts        // local-authentication helper
+   │  └─ pkce.ts             // PKCE helpers (code verifier/challenge)
+   ├─ storage/
+   │  └─ secureStore.ts      // wrapper around expo-secure-store
+   ├─ config/
+   │  └─ env.ts              // config from app.json extra / env vars
+   └─ types/
+      └─ api.ts              // API request/response types
+
 </pre>
