@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any
 from ocr_service.clients.mistral_ocr import run_ocr_image_path
-from ocr_service.core.types import DocType, ExtractionResult, OCRResult
+from ocr_service.core.types import DocType, ExtractionResult
 from ocr_service.config.settings import get_settings
 from ocr_service.documents.registry import get_processor
 
