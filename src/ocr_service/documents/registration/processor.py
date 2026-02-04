@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from ocr_service.core.types import OCRResult
 from ocr_service.documents.base import DocumentProcessor
-from ocr_service.documents.registration import schema
+from ocr_service.documents.registration import schema, postprocess as pp
 from ocr_service.documents.registration import extract as ex
 
 
@@ -60,5 +60,7 @@ class RegistrationProcessor(DocumentProcessor):
         # HU textual
         fields["manufacture_year"] = ex.extract_manufacture_year(text)
         fields["gearbox_type"] = ex.extract_gearbox_type(text)
+
+        fields = pp.postprocess(fields)
 
         return {k: fields.get(k) for k in schema.FIELDS}

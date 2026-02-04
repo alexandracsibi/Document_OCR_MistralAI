@@ -1,9 +1,109 @@
 from __future__ import annotations
 
+from datetime import date
+import html
 import re
-from typing import Optional, Match, Pattern
+from typing import List, Optional, Match, Pattern, Tuple
 
 _MD_DECOR = re.compile(r"[*_`#>]+")  # basic markdown tokens
+_MRZ_ALLOWED = re.compile(r"[^A-Z0-9<]")
+
+
+def _mrz_clean(line: str) -> str:
+    # decode '&lt;' -> '<' etc.
+    s = html.unescape(line or "")
+    s = s.upper()
+    s = s.replace(" ", "")
+    s = s.replace("«", "<").replace("‹", "<").replace("›", "<")
+    s = _MRZ_ALLOWED.sub("", s)
+    return s
+
+def _is_mrzish(s: str) -> bool:
+    if not s:
+        return False
+    return 20 <= len(s) <= 40
+
+def _pad_or_trim_30(s: str) -> str:
+    if len(s) >= 30:
+        return s[:30]
+    return s + ("<" * (30 - len(s)))
+
+def _mrz_value(ch: str) -> int:
+    # ICAO 9303 character values
+    if "0" <= ch <= "9":
+        return ord(ch) - ord("0")
+    if "A" <= ch <= "Z":
+        return ord(ch) - ord("A") + 10
+    if ch == "<":
+        return 0
+    return 0
+
+def mrz_check_digit(field: str) -> str:
+    weights = (7, 3, 1)
+    total = 0
+    for i, ch in enumerate(field):
+        total += _mrz_value(ch) * weights[i % 3]
+    return str(total % 10)
+
+def find_mrz_td1_block(lines: List[str]) -> Optional[Tuple[str, str, str]]:
+    """
+    Find best consecutive triple of MRZ-ish lines.
+    Returns 3 lines, each exactly 30 chars (padded/trimmed).
+    """
+    cleaned = [(_mrz_clean(ln), i) for i, ln in enumerate(lines)]
+    cand = [(s, i) for (s, i) in cleaned if _is_mrzish(s)]
+
+    # try consecutive triples (by original line index)
+    best: Optional[Tuple[int, Tuple[str, str, str]]] = None
+
+    cand_by_idx = {i: s for (s, i) in cand}
+    for i in range(len(lines) - 2):
+        if i not in cand_by_idx or (i + 1) not in cand_by_idx or (i + 2) not in cand_by_idx:
+            continue
+
+        l1 = _pad_or_trim_30(cand_by_idx[i])
+        l2 = _pad_or_trim_30(cand_by_idx[i + 1])
+        l3 = _pad_or_trim_30(cand_by_idx[i + 2])
+
+        # Simple scoring: closeness to 30 before pad + check digits validity if possible
+        score = 0
+        score -= abs(len(cand_by_idx[i]) - 30)
+        score -= abs(len(cand_by_idx[i + 1]) - 30)
+        score -= abs(len(cand_by_idx[i + 2]) - 30)
+
+        # bonus if DOB check digit matches
+        dob = l2[0:6]
+        dob_cd = l2[6:7]
+        if re.fullmatch(r"\d{6}", dob) and dob_cd.isdigit():
+            if mrz_check_digit(dob) == dob_cd:
+                score += 5
+
+        if best is None or score > best[0]:
+            best = (score, (l1, l2, l3))
+
+    return best[1] if best else None
+
+def parse_mrz_birth_date_yyMMdd(token: str, *, today: Optional[date] = None) -> Optional[str]:
+    """
+    Convert YYMMDD -> YYYY-MM-DD with a deterministic century rule:
+    - if YY > current_year%100 => 1900+YY else 2000+YY
+    """
+    if not token or not re.fullmatch(r"\d{6}", token):
+        return None
+    yy = int(token[0:2])
+    mm = int(token[2:4])
+    dd = int(token[4:6])
+
+    today = today or date.today()
+    pivot = today.year % 100
+    year = 1900 + yy if yy > pivot else 2000 + yy
+
+    try:
+        d = date(year, mm, dd)
+    except ValueError:
+        return None
+    return d.isoformat()
+
 
 def normalize_ocr_line(s: str) -> str:
     """

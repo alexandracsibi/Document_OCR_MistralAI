@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any
 
 from ocr_service.core.types import OCRResult
-from ocr_service.core.utils.image import file_path_to_data_url
+from ocr_service.core.utils.image import image_path_to_data_url
 
 
 def _guess_document_type_from_data_url(data_url: str) -> str:
@@ -14,7 +14,7 @@ def _guess_document_type_from_data_url(data_url: str) -> str:
 
 
 def run_ocr_image_path(*, client: Any, image_path: str, model: str = "mistral-ocr-latest", table_format: str = "markdown") -> OCRResult:
-    data_url = file_path_to_data_url(image_path)
+    data_url = image_path_to_data_url(image_path)
     doc_type = _guess_document_type_from_data_url(data_url)
 
     payload_key = "document_url" if doc_type == "document_url" else "image_url"

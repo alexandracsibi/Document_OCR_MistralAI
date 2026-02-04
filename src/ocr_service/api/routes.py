@@ -7,7 +7,7 @@ import tempfile
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from ocr_service.config.mistral_client import get_mistral_client
@@ -19,16 +19,16 @@ router = APIRouter()
 # Size limits (decoded bytes)
 MAX_IMAGE_BYTES = int(os.getenv("API_MAX_IMAGE_BYTES", "6000000"))   # 6 MB
 MAX_PDF_BYTES = int(os.getenv("API_MAX_PDF_BYTES", "20000000"))      # 20 MB
-ABSOLUTE_MAX_BYTES = int(os.getenv("API_ABSOLUTE_MAX_BYTES", "25000000"))  # 25 MB hard cap
 
 ALLOWED_EXT = {"jpg", "jpeg", "png", "webp", "pdf"}
 VEHICLE_TYPES = {"REGISTRATION", "COC"}  # doc_type.value strings
 
+CHUNK_SIZE = 1024 * 1024  # 1 MB
 
-class ProcessRequest(BaseModel):
+class ProcessBase64Request(BaseModel):
     doc_type: DocType
     image_base64: str = Field(..., min_length=16)
-    extension: Optional[str] = None  # "jpg" / "png" / "pdf" / ...
+    extension: Optional[str] = None  # jpg/png/webp/pdf
 
 
 def _strip_data_url(s: str) -> str:
@@ -53,47 +53,50 @@ def _sniff_ext(blob: bytes) -> Optional[str]:
     return None
 
 
-def _decode_base64_blob(b64: str) -> bytes:
-    raw = _strip_data_url(b64)
-    try:
-        data = base64.b64decode(raw, validate=True)
-    except (binascii.Error, ValueError):
-        raise HTTPException(status_code=400, detail="Invalid base64 payload.")
-    if not data:
-        raise HTTPException(status_code=400, detail="Decoded file is empty.")
-    if len(data) > ABSOLUTE_MAX_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Payload too large. Max decoded bytes = {ABSOLUTE_MAX_BYTES}.",
-        )
-    return data
+def _normalize_ext(ext: str) -> str:
+    e = (ext or "").strip().lower().lstrip(".")
+    return "jpg" if e == "jpeg" else e
 
 
-def _choose_ext(req_ext: Optional[str], blob: bytes) -> str:
+def _choose_ext(req_ext: Optional[str], blob: Optional[bytes], filename: Optional[str], content_type: Optional[str]) -> str:
+    # 1) explicit extension wins
     if req_ext:
-        ext = req_ext.strip().lower().lstrip(".")
-        if ext == "jpeg":
-            ext = "jpg"
+        ext = _normalize_ext(req_ext)
         if ext not in ALLOWED_EXT:
-            raise HTTPException(status_code=400, detail=f"Unsupported extension: {req_ext}.")
+            raise HTTPException(status_code=400, detail=f"Unsupported extension: {req_ext}")
         return ext
 
-    sniffed = _sniff_ext(blob)
-    if not sniffed:
-        raise HTTPException(status_code=400, detail="Could not detect file type (pdf/jpg/png/webp only).")
-    return sniffed
+    # 2) try content-type
+    ct = (content_type or "").lower().strip()
+    if ct == "application/pdf":
+        return "pdf"
+    if ct in ("image/jpeg", "image/jpg"):
+        return "jpg"
+    if ct == "image/png":
+        return "png"
+    if ct == "image/webp":
+        return "webp"
+
+    # 3) try filename suffix
+    if filename and "." in filename:
+        ext = _normalize_ext(filename.rsplit(".", 1)[-1])
+        if ext in ALLOWED_EXT:
+            return ext
+
+    # 4) try sniff (needs bytes)
+    if blob:
+        sniffed = _sniff_ext(blob)
+        if sniffed:
+            return sniffed
+
+    raise HTTPException(status_code=400, detail="Could not determine file type. Provide extension or a valid file.")
 
 
-def _enforce_type_size(blob: bytes, ext: str) -> None:
-    max_bytes = MAX_PDF_BYTES if ext == "pdf" else MAX_IMAGE_BYTES
-    if len(blob) > max_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large for {ext}. Max decoded bytes = {max_bytes}.",
-        )
+def _max_bytes_for_ext(ext: str) -> int:
+    return MAX_PDF_BYTES if ext == "pdf" else MAX_IMAGE_BYTES
 
 
-def _write_temp_file(blob: bytes, ext: str) -> str:
+def _write_temp_bytes(blob: bytes, ext: str) -> str:
     name = f"ocr_{uuid.uuid4().hex}.{ext}"
     path = os.path.join(tempfile.gettempdir(), name)
     with open(path, "wb") as f:
@@ -101,30 +104,118 @@ def _write_temp_file(blob: bytes, ext: str) -> str:
     return path
 
 
-@router.post("/process")
-def process(req: ProcessRequest) -> dict:
-    blob = _decode_base64_blob(req.image_base64)
-    ext = _choose_ext(req.extension, blob)
-    _enforce_type_size(blob, ext)
+async def _save_upload_to_temp(file: UploadFile, ext: str) -> str:
+    # Stream to disk while enforcing size.
+    limit = _max_bytes_for_ext(ext)
+    name = f"ocr_{uuid.uuid4().hex}.{ext}"
+    path = os.path.join(tempfile.gettempdir(), name)
 
-    path = _write_temp_file(blob, ext)
-
+    total = 0
     try:
-        client = get_mistral_client()
-        res = process_document(client=client, doc_type=req.doc_type, image_path=path)
-        doc_type = res.doc_type.value
-        fields = dict(res.fields or {})         # sparse raw fields from processor
-        data_key, data = unify_payload(doc_type, fields)  # MUST fill missing keys with None
-
-        return {
-            "doc_type": doc_type,
-            "document_number": res.document_number,
-            "is_correct_document": res.is_correct_document,
-            "confidence": round(res.confidence, 4),
-            data_key: data,                      # unified (all keys present)
-        }
-    finally:
+        with open(path, "wb") as out:
+            while True:
+                chunk = await file.read(CHUNK_SIZE)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Max bytes for .{ext} = {limit}.",
+                    )
+                out.write(chunk)
+        if total == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+        return path
+    except HTTPException:
+        # clean partial file
         try:
             os.remove(path)
         except OSError:
             pass
+        raise
+
+
+def _build_response(res) -> dict:
+    doc_type = res.doc_type.value
+    fields = dict(res.fields or {})
+    docno = res.document_number
+
+    data_key, data = unify_payload(doc_type, fields)
+
+    return {
+        "doc_type": doc_type,
+        "document_number": docno,
+        "is_correct_document": res.is_correct_document,
+        "confidence": round(res.confidence, 4),
+        data_key: data,
+    }
+
+# -------------------------
+# PRIMARY: multipart/form-data
+# -------------------------
+@router.post("/process")
+async def process_multipart(
+    doc_type: DocType = Form(...),
+    file: UploadFile = File(...),
+) -> dict:
+    # Determine extension without reading full file into RAM.
+    # Use content_type/filename first; if ambiguous, we sniff a small prefix.
+    prefix = await file.read(64)
+    await file.seek(0)
+
+    ext = _choose_ext(
+        req_ext=None,
+        blob=prefix,
+        filename=file.filename,
+        content_type=file.content_type,
+    )
+
+    tmp_path = await _save_upload_to_temp(file, ext)
+    try:
+        client = get_mistral_client()
+        res = process_document(client=client, doc_type=doc_type, image_path=tmp_path)
+        return _build_response(res)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+# -------------------------
+# FALLBACK: JSON base64
+# -------------------------
+@router.post("/process_base64")
+def process_base64(req: ProcessBase64Request) -> dict:
+    raw = _strip_data_url(req.file_base64)
+    try:
+        blob = base64.b64decode(raw, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid base64 payload.")
+
+    if not blob:
+        raise HTTPException(status_code=400, detail="Decoded file is empty.")
+
+    ext = _choose_ext(
+        req_ext=req.extension,
+        blob=blob,
+        filename=None,
+        content_type=None,
+    )
+
+    limit = _max_bytes_for_ext(ext)
+    if len(blob) > limit:
+        raise HTTPException(status_code=413, detail=f"File too large. Max bytes for .{ext} = {limit}.")
+
+    tmp_path = _write_temp_bytes(blob, ext)
+    try:
+        client = get_mistral_client()
+        res = process_document(client=client, doc_type=req.doc_type, image_path=tmp_path)
+        return _build_response(res)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        

@@ -24,5 +24,8 @@ class IDBackProcessor(DocumentProcessor):
         fields["mothers_name"] = ex.extract_mothers_name(lines)
         fields["origin_place"] = ex.extract_origin_place(lines)
         fields["issuing_authority"] = ex.extract_issuing_authority(text)
+        fields["document_number"] = ex.extract_document_number(text, lines)
+        fields["full_name"] = ex.extract_full_name(lines)
+        fields["birth_date"] = ex.extract_birth_date(lines)
 
         return {k: fields.get(k) for k in schema.FIELDS}

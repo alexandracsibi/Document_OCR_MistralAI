@@ -49,6 +49,12 @@ DOCNO_VALUE = re.compile(
     r"(?i)\b([0-9OIJLl]{6})\s?([A-Z01]{2})\b"
 )
 
+DOCNO_CANON = re.compile(r"^\d{6}\s[A-Z]{2}$")
+
+FOREIGN_ADDRESS_VALUE = re.compile(r"(?i)^\s*K[ÜU]LF[ÖO]LDI\s+C[ÍI]M\s*$")
+
+HUNGARY_WORD = re.compile(r"(?i)\bMAGYARORSZ[AÁ]G\b")
+
 # ================================
 # Stop-label set
 # Used to reject "value" lines that are actually labels

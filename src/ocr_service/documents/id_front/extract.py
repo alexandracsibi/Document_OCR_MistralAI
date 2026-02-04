@@ -8,9 +8,9 @@ from ocr_service.core.utils.normalize import (
     parse_dates_iso,
     ddmmyy_from_iso,
     normalize_sex,
+    normalize_id_number,
 )
 from ocr_service.documents.id_front import rules as rr
-from ocr_service.documents.id_front.normalize import normalize_id_number
 
 
 def _first_token(s: Optional[str]) -> Optional[str]:
